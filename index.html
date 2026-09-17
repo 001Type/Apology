@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>APOLOGY SYSTEM v1.2</title>
+  
+  <!-- Canvas Confetti Library for Celebration -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;800;900&family=Share+Tech+Mono&display=swap');
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: #050b14;
+      color: #00f0ff;
+      font-family: 'Share Tech Mono', monospace;
+      min-height: 100vh;
+      min-height: 100dvh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow-x: hidden;
+      position: relative;
+    }
+
+    /* CRT Overlay Grid & Scanlines */
+    body::before {
+      content: " ";
+      position: absolute;
+      top: 0; left: 0; bottom: 0; right: 0;
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), 
+                  linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+      z-index: 10;
+      background-size: 100% 3px, 6px 100%;
+      pointer-events: none;
+    }
+
+    /* Red Flash Overlay during system failure */
+    #red-overlay {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(255, 0, 0, 0.25);
+      z-index: 8;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* =======================================
+       LOADING / BOOT SCREEN STYLES
+       ======================================= */
+    #loader-screen {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background-color: #03070d;
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+      transition: opacity 0.6s ease, visibility 0.6s ease;
+    }
+
+    .loader-box {
+      max-width: 500px;
+      width: 100%;
+      text-align: left;
+    }
+
+    .terminal-header {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.1rem;
+      color: #ff2a6d;
+      margin-bottom: 15px;
+      letter-spacing: 2px;
+    }
+
+    .terminal-logs {
+      font-size: 0.85rem;
+      color: #00f0ff;
+      height: 120px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      margin-bottom: 20px;
+      border-left: 2px solid #00f0ff;
+      padding-left: 10px;
+    }
+
+    .progress-bar-container {
+      width: 100%;
+      height: 12px;
+      border: 1px solid #00f0ff;
+      padding: 2px;
+      position: relative;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: #00f0ff;
+      box-shadow: 0 0 10px #00f0ff;
+      transition: width 0.1s linear;
+    }
+
+    .progress-stats {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 8px;
+      font-size: 0.8rem;
+      color: rgba(0, 240, 255, 0.7);
+    }
+
+    /* =======================================
+       MAIN HUD COCKPIT STYLES
+       ======================================= */
+    .hud-container {
+      border: 2px solid #00f0ff;
+      background: rgba(5, 20, 35, 0.85);
+      box-shadow: 0 0 25px rgba(0, 240, 255, 0.3), inset 0 0 15px rgba(0, 240, 255, 0.2);
+      padding: 30px;
+      max-width: 600px;
+      width: 90%;
+      clip-path: polygon(0 10%, 10% 0, 90% 0, 100% 10%, 100% 90%, 90% 100%, 10% 100%, 0 90%);
+      position: relative;
+      text-align: center;
+      transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      opacity: 0;
+      transform: scale(0.9);
+      margin: 20px 0;
+    }
+
+    .hud-container.active {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    .hud-header {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.8rem;
+      letter-spacing: 3px;
+      color: #ff2a6d;
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255, 42, 109, 0.5);
+      padding-bottom: 8px;
+    }
+
+    .target-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.8rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      color: #fff;
+      text-shadow: 0 0 10px #00f0ff;
+      margin: 15px 0;
+    }
+
+    .status-msg {
+      font-size: 1.05rem;
+      color: #00f0ff;
+      margin-bottom: 25px;
+      line-height: 1.6;
+    }
+
+    /* Buttons */
+    .btn-group {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      position: relative;
+      min-height: 50px;
+      flex-wrap: wrap;
+    }
+
+    .hud-btn {
+      font-family: 'Orbitron', sans-serif;
+      padding: 14px 28px;
+      font-size: 0.95rem;
+      font-weight: 800;
+      background: transparent;
+      border: 2px solid;
+      cursor: pointer;
+      letter-spacing: 2px;
+      transition: all 0.2s ease;
+      clip-path: polygon(10% 0, 100% 0, 90% 100%, 0 100%);
+    }
+
+    .hud-btn:active {
+      transform: scale(0.95);
+    }
+
+    .btn-primary {
+      color: #050b14;
+      background-color: #00f0ff;
+      border-color: #00f0ff;
+      box-shadow: 0 0 15px rgba(0, 240, 255, 0.6);
+    }
+
+    .btn-primary:hover {
+      background-color: #fff;
+      box-shadow: 0 0 25px rgba(255, 255, 255, 0.9);
+      transform: scale(1.05);
+    }
+
+    .btn-decline {
+      color: #ff2a6d;
+      border-color: #ff2a6d;
+      background-color: rgba(255, 42, 109, 0.1);
+      box-shadow: 0 0 15px rgba(255, 42, 109, 0.3);
+    }
+
+    .btn-decline:hover {
+      background-color: #ff2a6d;
+      color: #fff;
+      box-shadow: 0 0 25px rgba(255, 42, 109, 0.8);
+      transform: scale(1.05);
+    }
+
+    /* Fast Transition */
+    .fast-fade-out {
+      opacity: 0 !important;
+      transform: scale(0.95) !important;
+    }
+
+    .fast-fade-in {
+      opacity: 1 !important;
+      transform: scale(1) !important;
+    }
+
+    /* OFFERING CARD STYLES */
+    .voucher-card {
+      border: 2px dashed #00704A; /* Starbucks Green Accent */
+      background: rgba(0, 112, 74, 0.15);
+      padding: 20px;
+      margin-top: 20px;
+      border-radius: 12px;
+      box-shadow: 0 0 20px rgba(0, 240, 255, 0.2);
+    }
+
+    /* AUDIO INDICATOR BADGE */
+    .audio-badge {
+      font-size: 0.75rem;
+      color: #2ed573;
+      margin-top: 10px;
+      letter-spacing: 1px;
+      display: inline-block;
+      animation: pulse-audio 1.5s infinite alternate;
+    }
+
+    @keyframes pulse-audio {
+      0% { opacity: 0.6; }
+      100% { opacity: 1; }
+    }
+
+    /* ANIMATION: GUNDAM COCKPIT SYSTEM LOSS OF CONTROL */
+    .cockpit-failure {
+      animation: cockpit-shake 0.08s infinite alternate, critical-glow 0.2s infinite alternate !important;
+    }
+
+    @keyframes cockpit-shake {
+      0% { transform: translate(3px, 3px) rotate(0.5deg); }
+      50% { transform: translate(-4px, -2px) rotate(-0.5deg); }
+      100% { transform: translate(2px, -3px) rotate(0.8deg); }
+    }
+
+    @keyframes critical-glow {
+      0% { border-color: #ff0000; box-shadow: 0 0 30px #ff0000, inset 0 0 20px #ff0000; }
+      100% { border-color: #ff2a6d; box-shadow: 0 0 60px #ff2a6d, inset 0 0 40px #ff2a6d; }
+    }
+
+    .glitch-text {
+      animation: glitch-anim 0.15s infinite;
+      color: #ff0000 !important;
+      text-shadow: 2px 0 #00f0ff, -2px 0 #ff2a6d !important;
+    }
+
+    @keyframes glitch-anim {
+      0% { opacity: 1; transform: skewX(0deg); }
+      20% { opacity: 0.8; transform: skewX(-10deg); }
+      40% { opacity: 1; transform: skewX(8deg); }
+      60% { opacity: 0.3; transform: skewX(-5deg); }
+      80% { opacity: 0.9; transform: skewX(3deg); }
+      100% { opacity: 1; transform: skewX(0deg); }
+    }
+
+    /* 200ms Fast CRT System Shutdown Animation */
+    .system-shutdown {
+      animation: screen-off 0.2s forwards ease-in !important;
+    }
+
+    @keyframes screen-off {
+      0% { transform: scale(1, 1); filter: brightness(1); }
+      50% { transform: scale(1, 0.005); filter: brightness(4); }
+      100% { transform: scale(0, 0); filter: brightness(0); opacity: 0; }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="red-overlay"></div>
+
+  <!-- Background Music Audio Element -->
+  <audio id="bg-music" loop preload="auto">
+    <!-- Replace this URL with any direct link to your MP3 file -->
+    <source src="./Panaginip  Piano Cover  nicole (Piano Sheet).mp3" type="audio/mpeg">
+  </audio>
+
+  <!-- 1. INITIAL LOADING SCREEN -->
+  <div id="loader-screen">
+    <div class="loader-box">
+      <div class="terminal-header">> INITIALIZING HUD...</div>
+      <div class="terminal-logs" id="logs"></div>
+      
+      <div class="progress-bar-container">
+        <div class="progress-bar-fill" id="progress-fill"></div>
+      </div>
+      <div class="progress-stats">
+        <span>STATUS: BOOTING</span>
+        <span id="progress-text">0%</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. MAIN COCKPIT INTERFACE -->
+  <div class="hud-container" id="hud">
+    
+    <!-- STAGE 1: INITIAL DISPLAY -->
+    <div id="stage-1">
+      <div class="hud-header">
+        <span>SYS.VER // 2.026</span>
+        <span>STATUS: CRITICAL</span>
+      </div>
+
+      <div style="font-size: 0.8rem; color: #ff2a6d;">[ TARGET IDENTIFIED ]</div>
+      <div class="target-title" id="pilot-name">FIONA CHYMES CATINDIG</div>
+
+      <p class="status-msg">
+        ACCEPT CREATOR APOLOGY?.<br>
+        SYSTEM READY FOR DECISION PROTOCOL.
+      </p>
+
+      <div class="btn-group">
+        <button class="hud-btn btn-primary" onclick="goToStage2()">CONTINUE ▶</button>
+      </div>
+    </div>
+
+    <!-- STAGE 2: DECISION INTERFACE -->
+    <div id="stage-2" style="display: none;">
+      <div class="hud-header">
+        <span id="hud-version">PROTOCOL // DECISION_MODE</span>
+        <span style="color: #00f0ff;" id="hud-status">SYSTEM WAITING</span>
+      </div>
+
+      <div style="font-size: 0.8rem; color: #ff2a6d;" id="sub-header">[ AUTHORIZATION REQUIRED ]</div>
+      <div class="target-title" id="main-title" style="font-size: 1.4rem;">SELECT FORGIVENESS PROTOCOL</div>
+
+      <p class="status-msg" id="stage2-msg">
+        PLEASE CHOOSE AN OPTION TO RESTORE FRIENDSHIP:
+      </p>
+
+      <div class="btn-group" id="stage2-buttons">
+        <button class="hud-btn btn-primary" id="accept-btn" onclick="resolveApology('accepted')">ACCEPT APOLOGY</button>
+        <button class="hud-btn btn-decline" id="decline-btn" onclick="resolveApology('declined')">DECLINE</button>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // URL parameter extraction (?name=Name)
+    const params = new URLSearchParams(window.location.search);
+    const pilot = params.get('name');
+    if (pilot) {
+      document.getElementById('pilot-name').textContent = `PILOT: ${pilot}`;
+    }
+
+    // BOOT SEQUENCE SIMULATOR
+    const bootSequence = [
+      "Establishing link to Apology OS...",
+      "Calibrating cockpit displays...",
+      "Loading Pilot Synchronization Data...",
+      "Scanning target identity...",
+      "Target verified.",
+      "Evaluating emotional damage metrics...",
+      "Cry Level: 100",
+      "Regret Level: 100%",
+      "System ready for override authorization..."
+    ];
+
+    let step = 0;
+    const logsContainer = document.getElementById('logs');
+    const fill = document.getElementById('progress-fill');
+    const progressText = document.getElementById('progress-text');
+    const loaderScreen = document.getElementById('loader-screen');
+    const hudContainer = document.getElementById('hud');
+
+    function runBootSequence() {
+      if (step < bootSequence.length) {
+        const logLine = document.createElement('div');
+        logLine.textContent = `> ${bootSequence[step]}`;
+        logsContainer.appendChild(logLine);
+
+        const percent = Math.round(((step + 1) / bootSequence.length) * 100);
+        fill.style.width = `${percent}%`;
+        progressText.textContent = `${percent}%`;
+
+        step++;
+        setTimeout(runBootSequence, 350);
+      } else {
+        setTimeout(() => {
+          loaderScreen.style.opacity = '0';
+          loaderScreen.style.visibility = 'hidden';
+          
+          setTimeout(() => {
+            hudContainer.classList.add('active');
+          }, 200);
+        }, 300);
+      }
+    }
+
+    window.addEventListener('load', () => {
+      setTimeout(runBootSequence, 300);
+    });
+
+    // STAGE 2 TRANSITION
+    function goToStage2() {
+      const hud = document.getElementById('hud');
+      const stage1 = document.getElementById('stage-1');
+      const stage2 = document.getElementById('stage-2');
+
+      hud.classList.add('fast-fade-out');
+
+      setTimeout(() => {
+        stage1.style.display = 'none';
+        stage2.style.display = 'block';
+        
+        hud.classList.remove('fast-fade-out');
+        hud.classList.add('fast-fade-in');
+      }, 200);
+    }
+
+    // FAST 200MS SYSTEM SHUTDOWN FUNCTION
+    function triggerFastShutdown(finalMessage) {
+      const mainTitle = document.getElementById('main-title');
+
+      if (finalMessage) {
+        mainTitle.textContent = finalMessage;
+      }
+
+      const hud = document.getElementById('hud');
+      hud.classList.add('system-shutdown');
+      
+      // Execute window close after 200ms animation completes
+      setTimeout(() => {
+        window.close();
+        document.body.innerHTML = "<div style='color: #2ed573; font-family: monospace; text-align: center; margin-top: 20%; font-size: 1.2rem;'>[ COCKPIT OFFLINE - YOU ARE MY BEST FRIEND FOREVER! ]</div>";
+      }, 200);
+    }
+
+    // RESOLUTION HANDLER
+    function resolveApology(type) {
+      const msg = document.getElementById('stage2-msg');
+      const btns = document.getElementById('stage2-buttons');
+      const hud = document.getElementById('hud');
+      const status = document.getElementById('hud-status');
+      const subHeader = document.getElementById('sub-header');
+      const mainTitle = document.getElementById('main-title');
+      const redOverlay = document.getElementById('red-overlay');
+      const music = document.getElementById('bg-music');
+
+      if (type === 'accepted') {
+        btns.style.display = 'none';
+
+        // Play Song upon accepting
+        music.play().catch(e => console.log("Audio autoplay prevented:", e));
+
+        hud.style.borderColor = '#2ed573';
+        hud.style.boxShadow = '0 0 35px rgba(46, 213, 115, 0.8), inset 0 0 20px rgba(46, 213, 115, 0.3)';
+        status.textContent = 'SYSTEM RESTORED';
+        status.style.color = '#2ed573';
+        subHeader.textContent = '[ SYNCHRONIZATION 100% ]';
+        subHeader.style.color = '#2ed573';
+        mainTitle.textContent = 'MISSION ACCOMPLISHED';
+        mainTitle.style.color = '#2ed573';
+
+        // Trigger Confetti Burst
+        confetti({
+          particleCount: 120,
+          spread: 80,
+          origin: { y: 0.6 }
+        });
+
+        msg.innerHTML = `
+          <span style='color: #2ed573; font-weight: bold; font-size: 1.25rem;'>APOLOGY ACCEPTED!</span><br>
+          <span style='color: #ffffff; font-size: 0.95rem;'>Friendship restored to optimal harmony. Thank you! ❤️</span>
+          <br><span class="audio-badge">🎵 PLAYING HARMONY PROTOCOL...</span>
+          
+          <div class="voucher-card">
+            <div style="color: #2ed573; font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 1.1rem; letter-spacing: 1px; margin-bottom: 8px;">
+              🍵 Starbucks Sea Salt Matcha Latte is on me!
+            </div>
+            <p style="color: #ffffff; font-size: 0.9rem; margin-bottom: 15px;">
+              Claimable on our next hangout!
+            </p>
+
+            <button class="hud-btn btn-primary" 
+                    onclick="triggerFastShutdown('You are my best friend!')"
+                    style="padding: 10px 30px; font-size: 0.9rem;">
+              Okay 🍵
+            </button>
+          </div>
+        `;
+
+      } else if (type === 'declined') {
+        btns.style.display = 'none';
+
+        // Cockpit loss-of-control effects
+        hud.classList.add('cockpit-failure');
+        redOverlay.style.opacity = '1';
+
+        status.textContent = 'CRITICAL ERROR';
+        status.style.color = '#ff0000';
+        subHeader.textContent = '[ COCKPIT CONTROL LOST ]';
+        subHeader.style.color = '#ff0000';
+        
+        mainTitle.textContent = "SYSTEM OVERLOAD";
+        mainTitle.classList.add('glitch-text');
+
+        const failureLogs = [
+          "WARNING: PILOT DISCONNECT DETECTED...",
+          "REACTOR CRITICAL // CONTROL SURFACES UNRESPONSIVE...",
+          "INITIATING EMERGENCY SHUTDOWN SEQUENCE..."
+        ];
+
+        let logIdx = 0;
+        const logInterval = setInterval(() => {
+          if (logIdx < failureLogs.length) {
+            msg.innerHTML = `<span style="color: #ff2a6d; font-weight: bold;">${failureLogs[logIdx]}</span>`;
+            logIdx++;
+          } else {
+            clearInterval(logInterval);
+
+            setTimeout(() => {
+              hud.classList.remove('cockpit-failure');
+              mainTitle.classList.remove('glitch-text');
+              redOverlay.style.opacity = '0';
+
+              hud.style.borderColor = '#ff2a6d';
+              hud.style.boxShadow = '0 0 15px rgba(255, 42, 109, 0.4)';
+              status.textContent = 'SYSTEM TERMINATED';
+              subHeader.textContent = '[ SHUTTING DOWN ]';
+              mainTitle.textContent = "GOODBYE";
+              mainTitle.style.color = "#ff2a6d";
+
+              msg.style.color = "#ffffff";
+              msg.style.fontSize = "1.15rem";
+              msg.innerHTML = "I understand. Thank you for our friendship for the past few months, I appreciate your existence and take care.";
+
+              setTimeout(() => {
+                triggerFastShutdown("SYSTEM OFFLINE");
+              }, 3500);
+
+            }, 600);
+          }
+        }, 900);
+      }
+    }
+  </script>
+</body>
+</html>
